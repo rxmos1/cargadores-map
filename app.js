@@ -54,7 +54,9 @@ function enrich(p, c) {
   return { p, dc, kw, rule, price, hours, cost: price != null ? price * c.kwh : null };
 }
 const passes = (p) => {
-  if (brands.size && !brands.has(p[9])) return false;
+  if (brands.size && !brands.has(p[10])) return false;
+  if (filter === "CCS2") return /T2COMBO/.test(p[9] || "");
+  if (filter === "T2") return /iec62196T2(:|,|$)/.test(p[9] || "");
   if (filter === "DC") return !!p[F.dc];
   if (filter === "AC") return !p[F.dc];
   if (filter === "150") return p[F.kw] >= 150;
@@ -96,7 +98,7 @@ function refresh() {
   if (map.getZoom() < 9) return;
   rows.slice(0, 50).forEach((r) => {
     const li = document.createElement("li");
-    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(nm(r.p)) + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
+    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + logo(r.p[10], 18) + esc(nm(r.p)) + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + (connShort(r.p) ? " · " + connShort(r.p) : "") + '</div></div>' +
       '<div class="pr">' + (r.price != null ? '<b class="ok">' + (r.price === 0 ? "Gratis" : eur(r.price) + "/kWh") + "</b><div class='sub'>" + (r.cost ? eur(r.cost, 1) + " · " : "") + fmtTime(r.hours) + "</div>" : '<div class="na">sin precio</div><div class="sub">' + fmtTime(r.hours) + "</div>") + "</div>";
     li.addEventListener("click", () => { if (mq.matches) setSheet("min"); map.setView([r.p[F.lat], r.p[F.lon]], Math.max(map.getZoom(), 16)); select(r.p); });
     $("list").appendChild(li);
@@ -106,7 +108,7 @@ function refresh() {
 const BR = [[/endesa/i, "Endesa X Way"], [/iberdrola/i, "Iberdrola"], [/repsol/i, "Repsol"], [/zunder|easychargar/i, "Zunder"], [/tesla/i, "Tesla"], [/electra/i, "Electra"], [/totalenergies/i, "TotalEnergies"], [/wenea/i, "Wenea"], [/\bedp\b/i, "EDP"], [/ionity/i, "Ionity"], [/atlante/i, "Atlante"], [/acciona/i, "Acciona"], [/galp/i, "Galp"], [/fastned/i, "Fastned"], [/barcelona de serveis|\bbsm\b/i, "BSM"], [/etecnic/i, "Etecnic"], [/charging together/i, "Charging Together"], [/eranovum/i, "Eranovum"], [/plenoil/i, "Plenoil"], [/bonpreu/i, "Bonpreu"]];
 function brandOf(op) { op = op || ""; for (const [re, n] of BR) if (re.test(op)) return n; return op.replace(/[,.]?\s*(S\.?L\.?U?\.?|S\.?A\.?U?\.?|SRL)\s*$/i, "").trim() || "Otros"; }
 function buildBrandUI() {
-  const cnt = {}; DATA.forEach((p) => { cnt[p[9]] = (cnt[p[9]] || 0) + 1; });
+  const cnt = {}; DATA.forEach((p) => { cnt[p[10]] = (cnt[p[10]] || 0) + 1; });
   const list = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 40);
   $("brands").innerHTML = '<button data-b="" class="on">Todas</button>' + list.map(([n, k]) => '<button data-b="' + esc(n) + '">' + esc(n) + " <small>" + k + "</small></button>").join("");
 }
@@ -117,25 +119,44 @@ $("brands").addEventListener("click", (e) => {
   $("bn").textContent = brands.size ? "(" + brands.size + ")" : "";
   buildMarkers();
 });
+const CTL = { iec62196T2COMBO: "CCS2", iec62196T2: "Tipo 2", chademo: "CHAdeMO", iec62196T1: "Tipo 1", iec62196T1COMBO: "CCS1", iec62196T3A: "Tipo 3A", iec62196T3C: "Tipo 3C" };
+const ctLabel = (k) => CTL[k] || (/^domestic/.test(k) ? "Schuko/doméstico" : /^iec60309/.test(k) ? "Industrial CEE" : k);
+function conns(p) { const m = {}; (p[9] || "").split(",").filter(Boolean).forEach((s) => { const [k, kw, n] = s.split(":"), l = ctLabel(k); m[l] = m[l] || { l, kw: 0, n: 0 }; m[l].kw = Math.max(m[l].kw, +kw); m[l].n += +n; }); return Object.values(m); }
+const connShort = (p) => conns(p).map((c) => c.l).join("/");
+const connChips = (p) => { const c = conns(p); return c.length ? '<div class="cc">' + c.map((x) => "<span>" + esc(x.l) + " <small>" + x.kw + " kW · ×" + x.n + "</small></span>").join("") + "</div>" : ""; };
+const LOGO = { "Endesa X Way": "endesa.com", Iberdrola: "iberdrola.es", Repsol: "repsol.com", Zunder: "zunder.com", Tesla: "tesla.com", Electra: "electra.eu", TotalEnergies: "totalenergies.es", EDP: "edp.com", Ionity: "ionity.eu", Acciona: "acciona.com", Galp: "galp.com", Fastned: "fastnedcharging.com", Plenoil: "plenoil.es", Bonpreu: "bonpreu.cat" };
+function logo(b, s) { const d = LOGO[b]; return '<span class="lg" style="width:' + s + "px;height:" + s + 'px"><b>' + esc((b || "?")[0]) + "</b>" + (d ? '<img alt="" loading="lazy" src="https://www.google.com/s2/favicons?domain=' + d + '&sz=64" onerror="this.remove()">' : "") + "</span>"; }
+let pm = null;
+function aerial(p) {
+  if (pm) { pm.remove(); pm = null; }
+  const el = $("ph"); if (!el) return;
+  pm = L.map(el, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false, keyboard: false }).setView([p[F.lat], p[F.lon]], 18);
+  L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 19 }).addTo(pm);
+  L.circleMarker([p[F.lat], p[F.lon]], { radius: 8, color: "#fff", weight: 3, fillColor: "#e82127", fillOpacity: 1 }).addTo(pm);
+}
+function flat(e) { if (!e.rule || e.rule.schedule) return ""; const bp = basePrice(e.rule, e.dc); return bp == null ? "" : '<p class="alt">Tarifa plana las 24 h: ' + eur(bp) + " /kWh. No tengo franjas horarias publicadas para este operador.</p>"; }
 function strip(e) {
   if (!e.rule || !e.rule.schedule || !e.dc) return "";
   const cur = hourSel != null ? hourSel : new Date().getHours(), v = [];
   for (let i = 0; i < 24; i++) { const s = e.rule.schedule.find((x) => i >= x[0] && i < x[1]); v.push(s ? s[2] : e.rule.dc); }
   const mx = Math.max(...v), mn = Math.min(...v); let bars = "";
   for (let i = 0; i < 24; i++) bars += '<i class="' + (i === cur ? "cur" : "") + '" style="height:' + (30 + (v[i] - mn) / (mx - mn || 1) * 70) + '%" title="' + i + ":00 · " + eur(v[i]) + '"></i>';
-  return '<div class="strip"><div>' + bars + "</div><span>Tarifa pública por hora (0–24 h): de " + eur(mn) + " a " + eur(mx) + " /kWh</span></div>";
+  let rows = "", i0 = 0;
+  for (let i = 1; i <= 24; i++) if (i === 24 || v[i] !== v[i0]) { rows += '<div class="bd' + (cur >= i0 && cur < i ? " now" : "") + '"><span>' + String(i0).padStart(2, "0") + "–" + String(i).padStart(2, "0") + " h</span><b>" + eur(v[i0]) + "</b>" + (e.rule.sub ? "<em>con suscripción " + eur(memberPrice(e.rule, v[i0])) + "</em>" : "") + "</div>"; i0 = i; }
+  return '<div class="bt"><b style="font-size:13px">Precio por franja horaria</b>' + rows + "</div>" + '<div class="strip"><div>' + bars + "</div><span>Tarifa pública por hora (0–24 h): de " + eur(mn) + " a " + eur(mx) + " /kWh</span></div>";
 }
 function select(p) {
   sel = p; const c = car(), e = enrich(p, c);
   const card = $("card"); card.hidden = false;
   const noteBase = e.rule && e.rule.sub ? "Suscripción: " + e.rule.sub.name : "";
-  card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3>' + esc(nm(p)) + '</h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
-    '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
+  card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3 class="hd">' + logo(p[10], 34) + "<span>" + esc(nm(p)) + '</span></h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
+    connChips(p) + '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
     (() => { const bp = basePrice(e.rule, e.dc), mp = memberPrice(e.rule, bp); return e.rule && e.rule.sub && bp && mp < bp ? '<p class="alt">Sin suscripción ' + eur(bp) + ' · Con suscripción ' + eur(mp) + ' /kWh</p>' : ""; })() + '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
     "<div><span>Coste de tu carga</span>" + (e.cost != null ? eur(e.cost, 2) : "—") + "</div><div><span>Km que añades</span>~" + Math.round(c.kwh / 0.16) + " km</div></div>" +
-    strip(e) + (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
+    strip(e) + flat(e) + (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
     (e.price == null ? '<p class="sub">No tengo el precio de este operador. Mira su app (Reve/operador).</p>' : "") +
-    '<a class="go" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + p[F.lat] + "," + p[F.lon] + '">Cómo llegar</a>';
+    '<div id="ph"></div><p class="alt">Vista aérea © Esri · el punto rojo es el cargador</p><a class="go" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + p[F.lat] + "," + p[F.lon] + '">Cómo llegar</a><a class="go sec" target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + p[F.lat] + "," + p[F.lon] + '">Ver la calle (Street View)</a>';
+  aerial(p);
   card.querySelector(".x").onclick = () => { card.hidden = true; sel = null; };
 }
 
@@ -145,7 +166,7 @@ async function loadData() {
   try {
     const j = await fetch("data/chargers.json?v=" + Date.now().toString(36).slice(0, -3), { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     DATA = j.d; updated = j.updated;
-    DATA.forEach((p) => { p[9] = brandOf(p[4]); }); buildBrandUI();
+    DATA.forEach((p) => { p[10] = brandOf(p[4]); }); buildBrandUI();
     $("foot").textContent = DATA.length.toLocaleString("es") + " puntos oficiales (MITECO / DGT, CC-BY) · actualizado " + new Date(updated).toLocaleDateString("es") + ". Precio solo donde se conoce la tarifa; el oficial en tiempo real está en mapareve.es.";
     buildMarkers(); $("boot").hidden = true;
   } catch (e) {
