@@ -33,9 +33,9 @@
     },
     {
       "name": "Tesla Supercharger",
-      "match": "tesla.*supercharger|supercharger",
+      "match": "tesla|supercharger",
       "dc": 0.39,
-      "note": "Estimación tarifa propietario Tesla (0,35-0,42). Mira la app de Tesla."
+      "note": "Estimación para propietarios Tesla (0,35-0,42 €/kWh); otras marcas pagan más (~0,51-0,54). Mira la app de Tesla."
     },
     {
       "name": "TotalEnergies",
