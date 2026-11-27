@@ -1,0 +1,53 @@
+{
+  "_nota": "Precios que me has pasado o que salieron en webs. Revisa cada uno en la app del operador. 'match' son expresiones regulares sobre 'operador título dirección' en minúsculas.",
+  "rules": [
+    {
+      "name": "Electra",
+      "match": "electra",
+      "dc": 0.54,
+      "schedule": [[0,1,0.54],[1,5,0.44],[5,7,0.54],[7,13,0.64],[13,17,0.54],[17,22,0.64],[22,24,0.54]],
+      "sub": { "name": "Electra+ Smart (4,99 €/mes)", "eurOff": 0.20 },
+      "note": "Horario de la estación de Sant Quirze (captura). Recargo ocupación +0,40 €/min desde el 80 % si está saturada."
+    },
+    {
+      "name": "Endesa X Way",
+      "match": "endesa",
+      "ac": 0.39,
+      "dc": 0.50,
+      "sub": { "name": "Endesa On Your Way (2,99 €/mes)", "pctOff": 20 },
+      "note": "Precio base sin confirmar (comentarios de usuarios, 0,39 € en AC)."
+    },
+    {
+      "name": "Iberdrola",
+      "match": "iberdrola",
+      "ac": 0.39,
+      "dc": 0.45,
+      "note": "Otra fuente indica 0,35 €/kWh en rápida. Sin confirmar."
+    },
+    {
+      "name": "Zunder",
+      "match": "zunder|obramat",
+      "ac": 0.39,
+      "dc": 0.55,
+      "sub": { "name": "Zunder Pro (11,99 €/mes)", "fixed": 0.39 }
+    },
+    {
+      "name": "Tesla Supercharger",
+      "match": "tesla.*supercharger|supercharger",
+      "dc": 0.39,
+      "note": "Estimación tarifa propietario Tesla (0,35-0,42). Mira la app de Tesla."
+    },
+    {
+      "name": "TotalEnergies",
+      "match": "totalenergies|total energies",
+      "sub": { "name": "Charge+ Smart (4,90 €/mes)", "pctOff": 10 },
+      "note": "Precio base no encontrado."
+    },
+    {
+      "name": "Endolla / BSM Barcelona",
+      "match": "bsm|b:sm|endolla|smou",
+      "ac": 0.44,
+      "note": "0,35 con abono, 0,44 sin abono (dato antiguo)."
+    }
+  ]
+}

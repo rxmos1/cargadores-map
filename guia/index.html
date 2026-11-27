@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cargadores y comparador de coches</title>
+<style>
+:root { --bg:#f6f7f5; --card:#fff; --ink:#1c2420; --mut:#5d6a63; --line:#dfe4e0; --ok:#0b7a4b; --warn:#a35a00; --dc:#c0392b; --ac:#2563a8; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141917; --card:#1d2420; --ink:#e8eeea; --mut:#9aa8a0; --line:#2c3630; --ok:#4cc790; --warn:#e0a24a; --dc:#ef7a6c; --ac:#6ea6e6; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,sans-serif; }
+main { max-width:780px; margin:0 auto; padding:16px; }
+h1 { font-size:21px; margin:4px 0 10px; } h2 { font-size:16px; margin:22px 0 8px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+label { display:block; font-size:12px; color:var(--mut); }
+input, select { width:100%; padding:7px; font-size:15px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); }
+.chk { display:flex; gap:6px; align-items:center; margin-top:8px; font-size:14px; color:var(--ink); }
+.chk input { width:auto; }
+.nav { display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+.nav a { padding:8px 14px; text-decoration:none; color:var(--mut); border-bottom:2px solid transparent; font-weight:600; }
+.nav a.on { color:var(--ink); border-color:var(--ink); }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+.tabs button, .btn { padding:6px 10px; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:20px; cursor:pointer; font-size:13px; }
+.tabs button[aria-pressed=true] { background:var(--ink); color:var(--bg); }
+.st { display:flex; justify-content:space-between; gap:10px; }
+.nm { font-weight:600; } .mt { color:var(--mut); font-size:13px; }
+.pill { display:inline-block; font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid currentColor; margin-right:4px; }
+.dc { color:var(--dc); } .ac { color:var(--ac); }
+.pr { text-align:right; white-space:nowrap; } .big { font-weight:700; color:var(--ok); } .none { color:var(--warn); font-size:13px; }
+table { width:100%; border-collapse:collapse; font-size:14px; } td,th { padding:5px 6px; border-bottom:1px solid var(--line); text-align:left; }
+.best { outline:2px solid var(--ok); }
+.hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+.hd input { font-weight:600; }
+.x { width:auto; border:0; background:none; color:var(--mut); cursor:pointer; font-size:18px; }
+.foot { color:var(--mut); font-size:12px; margin-top:18px; }
+#map { width:100%; height:auto; display:block; border-radius:8px; background:var(--bg); }
+#map .town { fill:var(--mut); font-size:12px; }
+#map .dot { cursor:pointer; stroke:var(--card); stroke-width:2; }
+#map .dot.sel { stroke:var(--ink); stroke-width:3; }
+.lk { color:var(--ac); font-size:13px; }
+[hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+<h1>Cargadores y comparador de coches</h1>
+<nav class="nav"><a href="#cargadores" id="n-cargadores">Cargadores</a><a href="#coches" id="n-coches">Comparar coches</a></nav>
+
+<section id="v-cargadores">
+  <div class="card">
+    <div class="grid">
+      <label>Batería (kWh)<input id="batt" type="number" value="60"></label>
+      <label>De %<input id="from" type="number" value="10"></label>
+      <label>A %<input id="to" type="number" value="80"></label>
+      <label>kWh/100 km<input id="cons" type="number" step="0.5" value="16"></label>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <label>Estoy en<select id="here">
+        <option value="cen">Casa (centro Sabadell)</option><option value="sq">Trabajo (Sant Quirze)</option>
+        <option value="gal">Serra de Galliners (Sabadell)</option><option value="sc">Sant Cugat</option>
+        <option value="ill">Barcelona (Diagonal)</option><option value="glo">Glòries</option><option value="maq">La Maquinista</option>
+      </select></label>
+      <label>Ordenar por<select id="sortby"><option value="price">Precio</option><option value="dist">Distancia</option></select></label>
+    </div>
+    <label class="chk"><input id="member" type="checkbox" checked> Con mis suscripciones (Endesa 2,99 €, Electra Smart 4,99 €, Zunder Pro…)</label>
+    <div id="sum" class="mt" style="margin-top:8px"></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="card">
+    <svg id="map" viewBox="0 0 600 646" role="img" aria-label="Esquema de cargadores"></svg>
+    <div id="sel" class="mt" style="margin-top:8px">Toca un punto para ver el cargador.</div>
+    <p class="mt" style="margin:6px 0 0">Esquema, no mapa real: las posiciones son aproximadas, agrupadas por zona. Cada cargador tiene un enlace para abrirlo en Google Maps.</p>
+  </div>
+  <div id="list"></div>
+  <h2>Electra Sant Quirze: precio por hora</h2>
+  <div class="card"><table id="sched"></table>
+  <p class="mt">Smart resta 0,20 €/kWh, Essential 0,10 €/kWh. Recargo de +0,40 €/min desde el 80 % si la estación está saturada.</p></div>
+</section>
+
+<section id="v-coches" hidden>
+  <div class="card">
+    <div class="grid">
+      <label>km por semana<input id="kmw" type="number" value="275"></label>
+    </div>
+    <p class="mt" style="margin:8px 0 0">Añade y edita coches. Consumo y precios son valores medios que puedes cambiar. Seguro, mantenimiento y cuota empiezan en 0: rellénalos si quieres comparar el coste total.</p>
+  </div>
+  <div id="cars"></div>
+  <div class="tabs">
+    <button class="btn" id="add-fuel">+ Gasolina</button>
+    <button class="btn" id="add-diesel">+ Diésel</button>
+    <button class="btn" id="add-hybrid">+ Híbrido</button>
+    <button class="btn" id="add-ev">+ Eléctrico</button>
+  </div>
+  <h2>Resultado</h2>
+  <div class="card"><table id="res"></table></div>
+</section>
+
+<p class="foot">Precios: «tú» o «captura» los has comprobado; «web» salen de páginas públicas y pueden estar desfasados; «estimación» es mía. «Sin precio» = míralo en la app del operador. Tiempos DC estimados (media 10–80 % hasta 110 kW, 25 kW por encima del 80 %); en AC tu coche admite ~11 kW.</p>
+</main>
+<script>
+"use strict";
+var $ = function (id) { return document.getElementById(id); };
+function num(id) { return parseFloat($(id).value) || 0; }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function eur(x, d) { return x.toFixed(d == null ? 2 : d).replace(".", ",") + " €"; }
+function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
+/* ---------- Datos de cargadores ---------- */
+var SCHED = [[0,1,0.54],[1,5,0.44],[5,7,0.54],[7,13,0.64],[13,17,0.54],[17,22,0.64],[22,24,0.54]];
+function electraNow() { var h = new Date().getHours(); for (var i=0;i<SCHED.length;i++) if (h>=SCHED[i][0] && h<SCHED[i][1]) return SCHED[i][2]; return 0.54; }
+var S = [
+ {n:"Wallbox del trabajo (BMC)", a:"Sant Quirze", op:"Privado", kw:11, dc:false, p:0.30, m:0.30, c:"tú", t:"Cargas mientras trabajas."},
+ {n:"Electra BMC", a:"Sant Quirze", op:"Electra", kw:300, dc:true, p:electraNow(), m:Math.max(0,electraNow()-0.20), c:"captura", t:"Precio de ahora; Smart -0,20 €/kWh."},
+ {n:"Endesa X Way · Colom 2 (SABA)", a:"Sabadell", op:"Endesa", kw:22, dc:false, p:0.39, m:0.312, c:"web", t:"22 kW, tu coche admite 11. On Your Way: -20 %."},
+ {n:"Endesa X Way · McDonald's Serra de Galliners", a:"Sabadell", op:"Endesa", kw:150, dc:true, p:null, m:null, c:"sin precio", t:"Rápida. Mira el precio en la app."},
+ {n:"Iberdrola · Fonollar / Concòrdia / Can Borrell", a:"Sabadell", op:"Iberdrola", kw:50, dc:true, p:0.45, m:0.45, c:"web", t:"Una fuente da 0,35 €/kWh en rápida: confírmalo."},
+ {n:"Zunder · Obramat Serra de Galliners", a:"Sabadell", op:"Zunder", kw:340, dc:true, p:0.55, m:0.39, c:"web", t:"Zunder Pro 11,99 €/mes → 0,39 €/kWh."},
+ {n:"TotalEnergies · C.C. Vía Sabadell", a:"Sabadell", op:"TotalEnergies", kw:400, dc:true, p:null, m:null, c:"sin precio", t:"Charge+ Smart 4,90 €/mes: -10 %."},
+ {n:"Acciona · IKEA Sabadell", a:"Sabadell", op:"Acciona", kw:120, dc:true, p:null, m:null, c:"sin precio", t:"36 puntos."},
+ {n:"Supercharger Sant Cugat", a:"Sant Cugat", op:"Tesla", kw:250, dc:true, p:0.39, m:0.39, c:"estimación", t:"Tarifa propietario ~0,35–0,42. Otras marcas 0,51–0,54."},
+ {n:"Supercharger L'Illa Diagonal", a:"Barcelona", op:"Tesla", kw:150, dc:true, p:0.35, m:0.35, c:"web", t:"4 Superchargers."},
+ {n:"La Maquinista (Westfield)", a:"Barcelona", op:"Tesla/otros", kw:22, dc:false, p:null, m:null, c:"sin precio", t:"8 conectores AC de 22 kW."},
+ {n:"Ona Glòries (BSM / Endolla)", a:"Barcelona", op:"Endolla", kw:6.1, dc:false, p:0.44, m:0.35, c:"web", t:"Muy lento (3,5–6 kW). Dato antiguo."}
+];
+var AREAS = ["Todas","Sant Quirze","Sabadell","Sant Cugat","Barcelona"], area = "Todas";
+// Zona de cada cargador (mismo orden que S) y búsqueda para Google Maps. Las posiciones son aproximadas por zona.
+var ZONES = {
+  sq:{la:41.53006, lo:2.08857}, cen:{la:41.5463, lo:2.1086}, gal:{la:41.5186, lo:2.0996},
+  sc:{la:41.4720, lo:2.0860}, ill:{la:41.3891, lo:2.1352}, maq:{la:41.4403, lo:2.1998}, glo:{la:41.4040, lo:2.1890}
+};
+var TOWNS = [["Terrassa",41.563,2.008],["Sabadell",41.5463,2.1086],["Sant Quirze",41.53006,2.08857],["Sant Cugat",41.472,2.086],["Barcelona (Diagonal)",41.3891,2.1352],["La Maquinista",41.4403,2.1998],["Glòries",41.404,2.189]];
+var META = [
+ {z:"sq",  q:"Sant Quirze del Vallès"},
+ {z:"sq",  q:"Electra Sant Quirze del Vallès"},
+ {z:"cen", q:"Endesa X Way Carrer de Colom 2 Sabadell"},
+ {z:"gal", q:"McDonald's Serra de Galliners Sabadell cargador"},
+ {z:"cen", q:"Iberdrola cargador Pla del Fonollar Sabadell"},
+ {z:"gal", q:"Obramat Sabadell Zunder"},
+ {z:"gal", q:"TotalEnergies Centro Comercial Vía Sabadell"},
+ {z:"gal", q:"IKEA Sabadell Acciona recarga"},
+ {z:"sc",  q:"Tesla Supercharger Sant Cugat del Vallès"},
+ {z:"ill", q:"Tesla Supercharger L'Illa Diagonal Barcelona"},
+ {z:"maq", q:"La Maquinista cargador Tesla Barcelona"},
+ {z:"glo", q:"Ona Glòries Barcelona cargadores"}
+];
+S.forEach(function (s, i) { s.z = META[i].z; s.q = META[i].q; });
+var selIdx = -1;
+function distKm(a, b) {
+  var R = 6371, r = Math.PI / 180, dLa = (b.la - a.la) * r, dLo = (b.lo - a.lo) * r;
+  var h = Math.sin(dLa/2) * Math.sin(dLa/2) + Math.cos(a.la*r) * Math.cos(b.la*r) * Math.sin(dLo/2) * Math.sin(dLo/2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function xy(la, lo) { return [ (lo - 1.98) / 0.26 * 560 + 20, (41.58 - la) / 0.21 * 606 + 20 ]; }
+function mapsUrl(s) { return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.q); }
+function renderMap(rows) {
+  var svg = $("map"), out = "";
+  TOWNS.forEach(function (t) { var p = xy(t[1], t[2]); out += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3" class="town"/><text x="' + (p[0]+7) + '" y="' + (p[1]-6) + '" class="town">' + esc(t[0]) + '</text>'; });
+  var count = {};
+  rows.forEach(function (s) {
+    var idx = S.indexOf(s), k = s.z; count[k] = (count[k] || 0) + 1;
+    var a = ZONES[k], p = xy(a.la, a.lo), ang = (count[k] - 1) * 1.05, r = count[k] === 1 ? 0 : 16 + Math.floor((count[k]-1)/6) * 10;
+    out += '<circle class="dot' + (idx === selIdx ? " sel" : "") + '" data-i="' + idx + '" cx="' + (p[0] + r*Math.cos(ang)).toFixed(1) + '" cy="' + (p[1] + r*Math.sin(ang) + 12).toFixed(1) + '" r="9" fill="' + (s.dc ? "var(--dc)" : "var(--ac)") + '"/>';
+  });
+  var h = ZONES[$("here").value] || ZONES.cen, hp = xy(h.la, h.lo);
+  out += '<circle cx="' + hp[0] + '" cy="' + hp[1] + '" r="16" fill="none" stroke="var(--ok)" stroke-width="3"/><text x="' + (hp[0]+20) + '" y="' + (hp[1]+4) + '" font-size="13" font-weight="700" fill="var(--ok)">Tú</text>';
+  svg.innerHTML = out;
+}
+function showSel() {
+  if (selIdx < 0) { $("sel").textContent = "Toca un punto para ver el cargador."; return; }
+  var s = S[selIdx], useM = $("member").checked, p = useM ? s.m : s.p;
+  $("sel").innerHTML = '<b>' + esc(s.n) + '</b> · ' + (s.dc ? "DC " : "AC ") + s.kw + ' kW · ' + (p == null ? "sin precio" : eur(p) + "/kWh") + ' · <a class="lk" href="' + mapsUrl(s) + '" target="_blank" rel="noopener">Abrir en Google Maps ↗</a>';
+}
+$("map").addEventListener("click", function (e) {
+  var i = e.target.getAttribute("data-i"); if (i === null) return;
+  selIdx = +i; renderChargers();
+});
+function fmt(h) { var m = Math.round(h*60); return m < 60 ? m+" min" : Math.floor(m/60)+" h "+("0"+(m%60)).slice(-2)+" min"; }
+function hours(s, k80, kAbove) {
+  if (!s.dc) return (k80+kAbove) / Math.min(s.kw, 11);
+  return k80 / Math.min(s.kw, 110) + kAbove / Math.min(s.kw, 25);
+}
+function renderChargers() {
+  var batt = num("batt"), from = num("from"), to = Math.max(from, num("to"));
+  var kwh = batt*(to-from)/100, k80 = batt*Math.max(0, Math.min(to,80)-from)/100, kAbove = Math.max(0, kwh-k80);
+  var cons = num("cons"), useM = $("member").checked;
+  $("sum").textContent = "Carga de " + kwh.toFixed(0) + " kWh (~" + Math.round(cons ? kwh/cons*100 : 0) + " km).";
+  var rows = S.filter(function (s) { return area === "Todas" || s.a === area; });
+  var here = ZONES[$("here").value] || ZONES.cen;
+  rows.forEach(function (s) { s.d = distKm(here, ZONES[s.z]); });
+  if ($("sortby").value === "dist") rows.sort(function (a,b) { return a.d - b.d; });
+  else rows.sort(function (a,b) { var pa = useM ? a.m : a.p, pb = useM ? b.m : b.p; return (pa==null)-(pb==null) || pa-pb; });
+  $("list").innerHTML = rows.map(function (s) {
+    var p = useM ? s.m : s.p;
+    var right = p == null ? '<div class="none">sin precio</div>' :
+      '<div class="big">' + eur(p*kwh) + '</div><div class="mt">' + eur(p) + '/kWh</div><div class="mt">' + eur(cons/100*p) + '/100 km</div>';
+    return '<div class="card st"><div><div class="nm">' + esc(s.n) + '</div><div class="mt"><span class="pill ' + (s.dc?"dc":"ac") + '">' + (s.dc?"DC":"AC") + ' ' + s.kw + ' kW</span>' + esc(s.a) + ' · ' + esc(s.op) + ' · ' + esc(s.c) + ' · a ~' + (s.d < 1 ? "<1" : s.d.toFixed(0)) + ' km</div><div class="mt">⏱ ~' + fmt(hours(s,k80,kAbove)) + ' · ' + esc(s.t) + ' <a class="lk" href="' + mapsUrl(s) + '" target="_blank" rel="noopener">Mapa ↗</a></div></div><div class="pr">' + right + '</div></div>';
+  }).join("");
+  renderMap(rows); showSel();
+}
+$("tabs").innerHTML = AREAS.map(function (a) { return '<button aria-pressed="' + (a==="Todas") + '" data-a="' + a + '">' + a + '</button>'; }).join("");
+$("tabs").addEventListener("click", function (e) {
+  var a = e.target.getAttribute("data-a"); if (!a) return; area = a;
+  Array.prototype.forEach.call($("tabs").children, function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-a")===a); });
+  renderChargers();
+});
+["batt","from","to","cons","member","here","sortby"].forEach(function (id) { $(id).addEventListener("input", renderChargers); });
+$("sched").innerHTML = "<tr><th>Franja</th><th>Sin suscripción</th><th>Smart</th></tr>" + SCHED.map(function (s) {
+  return "<tr><td>" + s[0] + "h–" + s[1] + "h</td><td>" + eur(s[2]) + "</td><td>" + eur(s[2]-0.2) + "</td></tr>"; }).join("");
+
+/* ---------- Comparador de coches ---------- */
+var KINDS = {
+  fuel:   {label:"Gasolina", unit:"l/100 km",   pu:"€/litro", cons:6.5, price:1.50},
+  diesel: {label:"Diésel",   unit:"l/100 km",   pu:"€/litro", cons:5.5, price:1.40},
+  hybrid: {label:"Híbrido",  unit:"l/100 km",   pu:"€/litro", cons:4.5, price:1.50},
+  ev:     {label:"Eléctrico",unit:"kWh/100 km", pu:"€/kWh",   cons:16,  price:0.30}
+};
+var uid = 10;
+var cars = [
+  {id:1, n:"Seat Ibiza", k:"fuel", cons:6, price:1.50, ins:0, mnt:0, pay:0},
+  {id:2, n:"Tesla Model 3 TT", k:"ev", cons:16, price:0.30, ins:0, mnt:0, pay:0}
+];
+try { var saved = JSON.parse(ls("cars") || "null"); if (saved && saved.length) { cars = saved; uid = Math.max.apply(null, cars.map(function (c) { return c.id; })) + 1; } } catch (e) {}
+function saveCars() { ls("cars", JSON.stringify(cars)); }
+function priceOptions(c) {
+  if (c.k !== "ev") return "";
+  var o = '<option value="">Precio personalizado</option>';
+  S.forEach(function (s, i) { var p = s.m != null ? s.m : s.p; if (p != null) o += '<option value="' + p + '">' + esc(s.n) + ' · ' + eur(p) + '/kWh</option>'; });
+  return '<label>Rellenar con un cargador<select data-f="pick" data-id="' + c.id + '">' + o + '</select></label>';
+}
+function renderCars() {
+  $("cars").innerHTML = cars.map(function (c) {
+    var K = KINDS[c.k];
+    return '<div class="card"><div class="hd"><input data-f="n" data-id="' + c.id + '" value="' + esc(c.n) + '"><span class="pill">' + K.label + '</span><button class="x" data-del="' + c.id + '" title="Quitar">×</button></div>' +
+      '<div class="grid">' +
+      '<label>Consumo (' + K.unit + ')<input type="number" step="0.1" data-f="cons" data-id="' + c.id + '" value="' + c.cons + '"></label>' +
+      '<label>Precio (' + K.pu + ')<input type="number" step="0.01" data-f="price" data-id="' + c.id + '" value="' + c.price + '"></label>' +
+      '<label>Seguro (€/año)<input type="number" data-f="ins" data-id="' + c.id + '" value="' + c.ins + '"></label>' +
+      '<label>Mantenimiento (€/año)<input type="number" data-f="mnt" data-id="' + c.id + '" value="' + c.mnt + '"></label>' +
+      '<label>Cuota o amortización (€/mes)<input type="number" data-f="pay" data-id="' + c.id + '" value="' + c.pay + '"></label>' +
+      '</div>' + priceOptions(c) + '</div>';
+  }).join("");
+  renderResult();
+}
+function renderResult() {
+  var km = num("kmw"), rows = cars.map(function (c) {
+    var per100 = c.cons * c.price, energy = km * 4.33 / 100 * per100, extras = c.ins/12 + c.mnt/12 + c.pay;
+    return {c:c, per100:per100, energy:energy, extras:extras, total:energy + extras};
+  });
+  var min = Math.min.apply(null, rows.map(function (r) { return r.total; }));
+  $("res").innerHTML = "<tr><th>Coche</th><th>€/100 km</th><th>Energía/mes</th><th>Otros/mes</th><th>Total/mes</th><th>Total/año</th></tr>" +
+    rows.map(function (r) {
+      var best = rows.length > 1 && r.total === min;
+      return '<tr' + (best ? ' class="best"' : '') + '><td>' + esc(r.c.n) + '</td><td>' + eur(r.per100) + '</td><td>' + eur(r.energy, 0) + '</td><td>' + eur(r.extras, 0) + '</td><td><b>' + eur(r.total, 0) + '</b></td><td>' + eur(r.total*12, 0) + '</td></tr>';
+    }).join("");
+}
+$("cars").addEventListener("input", function (e) {
+  var id = +e.target.getAttribute("data-id"), f = e.target.getAttribute("data-f"); if (!f) return;
+  var c = cars.filter(function (x) { return x.id === id; })[0]; if (!c) return;
+  if (f === "n") c.n = e.target.value;
+  else if (f === "pick") { if (e.target.value !== "") { c.price = parseFloat(e.target.value); renderCars(); saveCars(); } return; }
+  else c[f] = parseFloat(e.target.value) || 0;
+  saveCars(); renderResult();
+});
+$("cars").addEventListener("click", function (e) {
+  var d = e.target.getAttribute("data-del"); if (!d) return;
+  cars = cars.filter(function (x) { return x.id !== +d; }); saveCars(); renderCars();
+});
+[["add-fuel","fuel","Coche gasolina"],["add-diesel","diesel","Coche diésel"],["add-hybrid","hybrid","Coche híbrido"],["add-ev","ev","Coche eléctrico"]].forEach(function (a) {
+  $(a[0]).addEventListener("click", function () {
+    var K = KINDS[a[1]]; cars.push({id:uid++, n:a[2], k:a[1], cons:K.cons, price:K.price, ins:0, mnt:0, pay:0}); saveCars(); renderCars();
+  });
+});
+$("kmw").addEventListener("input", renderResult);
+
+/* ---------- Pestañas ---------- */
+function route() {
+  var v = location.hash === "#coches" ? "coches" : "cargadores";
+  ["cargadores","coches"].forEach(function (n) { $("v-" + n).hidden = n !== v; $("n-" + n).className = n === v ? "on" : ""; });
+}
+window.addEventListener("hashchange", route);
+route(); renderChargers(); renderCars();
+</script>
+</body>
+</html>
