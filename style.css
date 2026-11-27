@@ -85,3 +85,6 @@ details.brands { margin:2px 0 8px; flex:none; } .bchips { display:flex; flex-wra
 #card a.go.sec { background:transparent; color:var(--ink); border:1px solid var(--line); margin-top:8px; }
 .bd { display:flex; gap:10px; font-size:12px; padding:3px 0; color:var(--mut); } .bd b { color:var(--ink); min-width:64px; font-weight:600; } .bd em { font-style:normal; } .bd.now, .bd.now b { color:var(--ok); }
 .bt { margin-top:8px; border-top:1px solid var(--line); padding-top:6px; }
+
+#nav span { padding:8px 18px; font-weight:700; font-size:13px; letter-spacing:.01em; }
+.leaflet-control-layers { background:var(--panel); color:var(--ink); border:1px solid var(--line) !important; border-radius:12px; } .leaflet-control-layers-expanded { padding:8px 10px; } .leaflet-control-layers-toggle { background-color:var(--panel); border-radius:12px; }

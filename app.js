@@ -6,8 +6,11 @@ const esc = (s) => { const d = document.createElement("div"); d.textContent = s 
 const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([41.5463, 2.1086], 11);
 L.control.zoom({ position: "bottomright" }).addTo(map);
 let tileErr = 0;
-const base = L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }).addTo(map);
-L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19 }).addTo(map);
+const base = L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" });
+const dark = L.layerGroup([base, L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19 })]).addTo(map);
+const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" });
+const sat = L.layerGroup([L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 19, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" }), L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19 })]);
+L.control.layers({ Oscuro: dark, Calles: osm, "Satélite": sat }, null, { position: "topright" }).addTo(map);
 // Si el mapa base falla (bloqueador, red), cambia a OpenStreetMap estándar
 base.on("tileerror", () => { if (++tileErr === 8) { map.removeLayer(base); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map).bringToBack(); } });
 const cluster = L.markerClusterGroup({
@@ -222,14 +225,5 @@ async function search() {
 $("go").addEventListener("click", search);
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
 
-function route() {
-  const h = location.hash.slice(1) || "mapa";
-  const isMap = h === "mapa";
-  $("panel").hidden = !isMap; $("fab").hidden = !isMap; if (!isMap) $("card").hidden = true;
-  $("frame").hidden = isMap;
-  ["mapa", "coches", "guia"].forEach((n) => { $("n-" + n).className = n === h ? "on" : ""; });
-  if (h === "coches") $("frame").src = "guia/index.html#coches";
-  else if (h === "guia") $("frame").src = "guia/index.html#cargadores";
-  else setTimeout(() => map.invalidateSize(), 50);
-}
+function route() { setTimeout(() => map.invalidateSize(), 50); }
 window.addEventListener("hashchange", route); route();
