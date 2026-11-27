@@ -1,21 +1,28 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-const map = L.map("map").setView([41.5463, 2.1086], 12);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
-const layer = L.layerGroup().addTo(map);
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
-let reqId = 0;
-let youMarker = null, rules = [], ctrl = null, timer = null, lastData = [], origin = null;
-
-fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; if (lastData.length) render(); }).catch(() => {});
-
 const esc = (s) => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
+
+// Mapa con teselas oscuras de CARTO (datos © OpenStreetMap)
+const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([41.5463, 2.1086], 11);
+L.control.zoom({ position: "bottomright" }).addTo(map);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  subdomains: "abcd", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}).addTo(map);
+const cluster = L.markerClusterGroup({
+  chunkedLoading: true, maxClusterRadius: 55, disableClusteringAtZoom: 15, showCoverageOnHover: false,
+  iconCreateFunction: (c) => { const n = c.getChildCount(), s = n < 100 ? 34 : n < 1000 ? 42 : 50; return L.divIcon({ html: "<div class='cl' style='width:" + s + "px;height:" + s + "px;line-height:" + (s - 4) + "px'>" + n + "</div>", className: "", iconSize: [s, s] }); },
+});
+map.addLayer(cluster);
+
+let DATA = [], rules = [], origin = null, youMarker = null, filter = "", sel = null, updated = "";
+const F = { lat: 0, lon: 1, kw: 2, dc: 3, op: 4, name: 5, fee: 6 };
+
+// ---------- Precios ----------
 const findRule = (t) => rules.find((r) => new RegExp(r.match).test(t.toLowerCase()));
 function basePrice(rule, dc) {
   if (!rule) return null;
   if (dc && rule.schedule) { const h = new Date().getHours(); const s = rule.schedule.find((x) => h >= x[0] && h < x[1]); if (s) return s[2]; }
-  const p = dc ? rule.dc : rule.ac;
-  return typeof p === "number" ? p : null;
+  const p = dc ? rule.dc : rule.ac; return typeof p === "number" ? p : null;
 }
 function memberPrice(rule, base) {
   if (!rule || !rule.sub || base == null) return base;
@@ -25,113 +32,119 @@ function memberPrice(rule, base) {
   if (typeof s.eurOff === "number") return Math.max(0, base - s.eurOff);
   return base;
 }
+const eur = (x, d = 2) => x.toFixed(d).replace(".", ",") + " €";
 function fmtTime(h) { const m = Math.round(h * 60); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0") + " min"; }
 
-function parseKw(v) {
-  const m = /([\d.,]+)\s*(kw|w)?/i.exec(v || ""); if (!m) return 0;
-  let n = parseFloat(m[1].replace(",", ".")); if (!isFinite(n)) return 0;
-  const u = (m[2] || "").toLowerCase();
-  if (u === "w" || (!u && n > 1000)) n /= 1000;
-  return n;
-}
-function info(el) {
-  const t = el.tags || {}; let kw = 0, dc = false;
-  for (const k in t) {
-    if (/^socket:(ccs|chademo|tesla_supercharger|type1_combo)(:|$)/.test(k)) dc = true;
-    if (/^socket:.*:output$/.test(k)) kw = Math.max(kw, parseKw(t[k]));
-  }
-  if (!kw && t.capacity) kw = 0;
-  if (!dc && kw >= 40) dc = true;
-  return { kw, dc, op: t.operator || t.brand || t.network || "", name: t.name || t.operator || t.brand || "Cargador", fee: t.fee, charge: t.charge };
-}
-function dist(a, b) { const r = Math.PI / 180, dl = (b[0] - a[0]) * r, dn = (b[1] - a[1]) * r;
-  const h = Math.sin(dl / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dn / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); }
-
-async function load() {
-  if (map.getZoom() < 10) { layer.clearLayers(); $("list").innerHTML = ""; $("status").textContent = "Acerca el zoom (10 o más) para ver los cargadores."; return; }
-  const b = map.getBounds();
-  const q = `[out:json][timeout:40];(node["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});way["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out center 1500;`;
-  const id = ++reqId;
-  if (ctrl) ctrl.abort();
-  $("status").textContent = "Buscando cargadores…";
-  let ok = false, lastErr = "";
-  for (const u of OVERPASS) {
-    ctrl = new AbortController();
-    const mine = ctrl, to = setTimeout(() => mine.abort(), 45000);
-    try {
-      const r = await fetch(u, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: mine.signal });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await r.json(); if (j.remark && /error|timeout/i.test(j.remark)) throw new Error("servidor saturado"); lastData = j.elements || []; ok = true; clearTimeout(to); break;
-    } catch (e) {
-      clearTimeout(to);
-      if (id !== reqId) return;
-      lastErr = e.name === "AbortError" ? "tiempo agotado" : e.message;
-    }
-  }
-  if (id !== reqId) return;
-  if (!ok) { $("status").textContent = "Los servidores de OpenStreetMap están saturados (" + lastErr + "). Mueve el mapa para reintentar."; return; }
-  render();
-}
-
-function render() {
-  layer.clearLayers(); $("list").innerHTML = "";
-  const minkw = +$("minkw").value || 0, want = $("ctype").value, useM = $("member").checked;
+function car() {
   const batt = +$("batt").value || 60, from = +$("from").value || 0, to = Math.max(from, +$("to").value || 80);
-  const kwh = batt * (to - from) / 100, k80 = batt * Math.max(0, Math.min(to, 80) - from) / 100, kAbove = Math.max(0, kwh - k80);
-  const c = origin || [map.getCenter().lat, map.getCenter().lng];
+  const kwh = batt * (to - from) / 100, k80 = batt * Math.max(0, Math.min(to, 80) - from) / 100;
+  return { kwh, k80, kAbove: Math.max(0, kwh - k80), acmax: +$("acmax").value || 11, member: $("member").checked };
+}
+function enrich(p, c) {
+  const dc = !!p[F.dc], kw = p[F.kw] || (dc ? 50 : 7);
+  const rule = findRule(p[F.op] + " " + p[F.name]);
+  let price = p[F.fee] === 0 ? 0 : basePrice(rule, dc);
+  if (c.member && price) price = memberPrice(rule, price);
+  const hours = dc ? c.k80 / Math.min(kw, 110) + c.kAbove / Math.min(kw, 25) : c.kwh / Math.min(kw, c.acmax);
+  return { p, dc, kw, rule, price, hours, cost: price != null ? price * c.kwh : null };
+}
+const passes = (p) => {
+  if (filter === "DC") return !!p[F.dc];
+  if (filter === "AC") return !p[F.dc];
+  if (filter === "150") return p[F.kw] >= 150;
+  if (filter === "priced") return p[F.fee] === 0 || !!findRule(p[F.op] + " " + p[F.name]);
+  return true;
+};
+
+// ---------- Marcadores (todos los filtrados, agrupados) ----------
+function buildMarkers() {
+  cluster.clearLayers();
+  const ms = [];
+  for (const p of DATA) {
+    if (!passes(p)) continue;
+    const dc = !!p[F.dc];
+    const m = L.circleMarker([p[F.lat], p[F.lon]], { radius: 6, color: "#111", weight: 1, fillColor: dc ? "#e82127" : "#f2f3f5", fillOpacity: 0.95 });
+    m.on("click", () => select(p));
+    ms.push(m);
+  }
+  cluster.addLayers(ms);
+  refresh();
+}
+
+// ---------- Lista y estadísticas de la zona visible ----------
+function dist(a, b) { const r = Math.PI / 180, dl = (b[0] - a[0]) * r, dn = (b[1] - a[1]) * r; const h = Math.sin(dl / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dn / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); }
+function refresh() {
+  const c = car(), b = map.getBounds(), cen = origin || [map.getCenter().lat, map.getCenter().lng];
   const rows = [];
-  for (const el of lastData) {
-    const pos = el.type === "node" ? [el.lat, el.lon] : el.center ? [el.center.lat, el.center.lon] : null; if (!pos) continue;
-    const i = info(el);
-    if (i.kw < minkw) continue;
-    if (want === "DC" && !i.dc) continue;
-    if (want === "AC" && i.dc) continue;
-    const rule = findRule([i.op, i.name].join(" "));
-    let p = basePrice(rule, i.dc); if (useM) p = memberPrice(rule, p);
-    const eff = i.kw || (i.dc ? 50 : 7);
-    const hours = i.dc ? k80 / Math.min(eff, 110) + kAbove / Math.min(eff, 25) : kwh / Math.min(eff, 11);
-    rows.push({ pos, i, rule, p, hours, d: dist(c, pos) });
+  for (const p of DATA) {
+    if (!b.contains([p[F.lat], p[F.lon]]) || !passes(p)) continue;
+    const e = enrich(p, c); e.d = dist(cen, [p[F.lat], p[F.lon]]); rows.push(e);
   }
   rows.sort((a, b) => a.d - b.d);
-  $("status").textContent = rows.length + " cargadores en esta zona · carga de " + kwh.toFixed(0) + " kWh";
-  rows.forEach((r, n) => {
-    const col = r.i.dc ? "#d33" : "#27a";
-    const priceTxt = r.p != null ? r.p.toFixed(2) + " €/kWh · " + (r.p * kwh).toFixed(2) + " € la carga" : "sin precio: mira la app del operador";
-    const pop = "<b>" + esc(r.i.name) + "</b><br>" + esc(r.i.op) + "<br>" + (r.i.kw ? r.i.kw + " kW " : "") + (r.i.dc ? "DC" : "AC") + "<br>" + esc(priceTxt) +
-      '<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + r.pos[0] + "," + r.pos[1] + '">Cómo llegar</a>';
-    const m = L.circleMarker(r.pos, { radius: 7, color: col, fillColor: col, fillOpacity: 0.75 }).addTo(layer).bindPopup(pop);
-    if (n < 60) {
-      const li = document.createElement("li");
-      li.innerHTML = '<div class="t">' + esc(r.i.name) + '</div><div class="m">' + esc(r.i.op || "operador desconocido") + " · " + r.d.toFixed(1) + " km</div>" +
-        '<div class="m">' + (r.i.kw ? r.i.kw + " kW " : "") + (r.i.dc ? "DC" : "AC") + " · ~" + fmtTime(r.hours) + "</div>" +
-        (r.p != null ? '<div class="price">' + esc(priceTxt) + "</div>" : '<div class="m warn">' + esc(priceTxt) + "</div>") +
-        (r.rule && r.rule.note ? '<div class="m">' + esc(r.rule.note) + "</div>" : "");
-      li.addEventListener("click", () => { map.setView(r.pos, 16); m.openPopup(); });
-      $("list").appendChild(li);
-    }
+  const priced = rows.filter((r) => r.price != null && r.price > 0);
+  $("s-n").textContent = rows.length;
+  $("s-p").textContent = priced.length ? eur(Math.min(...priced.map((r) => r.price))) : "–";
+  $("s-t").textContent = c.kwh.toFixed(0) + " kWh";
+  $("status").textContent = map.getZoom() < 9 ? "Acerca el mapa para ver la lista." : "";
+  $("list").innerHTML = "";
+  if (map.getZoom() < 9) return;
+  rows.slice(0, 50).forEach((r) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(r.p[F.name] || r.p[F.op] || "Cargador") + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
+      '<div class="pr">' + (r.price != null ? '<b class="ok">' + (r.price === 0 ? "Gratis" : eur(r.price) + "/kWh") + "</b><div class='sub'>" + (r.cost ? eur(r.cost, 1) + " · " : "") + fmtTime(r.hours) + "</div>" : '<div class="na">sin precio</div><div class="sub">' + fmtTime(r.hours) + "</div>") + "</div>";
+    li.addEventListener("click", () => { map.setView([r.p[F.lat], r.p[F.lon]], Math.max(map.getZoom(), 16)); select(r.p); });
+    $("list").appendChild(li);
   });
 }
 
-map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(load, 600); });
-["ctype", "minkw", "member", "batt", "from", "to"].forEach((id) => $(id).addEventListener("input", render));
+function select(p) {
+  sel = p; const c = car(), e = enrich(p, c);
+  const card = $("card"); card.hidden = false;
+  const noteBase = e.rule && e.rule.sub ? "Suscripción: " + e.rule.sub.name : "";
+  card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3>' + esc(p[F.name] || p[F.op] || "Cargador") + '</h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
+    '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
+    '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
+    "<div><span>Coste de tu carga</span>" + (e.cost != null ? eur(e.cost, 2) : "—") + "</div><div><span>Km que añades</span>~" + Math.round(c.kwh / 0.16) + " km</div></div>" +
+    (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
+    (e.price == null ? '<p class="sub">No tengo el precio de este operador. Mira su app (Reve/operador).</p>' : "") +
+    '<a class="go" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + p[F.lat] + "," + p[F.lon] + '">Cómo llegar</a>';
+  card.querySelector(".x").onclick = () => { card.hidden = true; sel = null; };
+}
 
+// ---------- Datos ----------
+async function loadData() {
+  $("status").textContent = "Cargando cargadores de España…";
+  try {
+    const j = await fetch("data/chargers.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    DATA = j.d; updated = j.updated;
+    $("foot").textContent = DATA.length.toLocaleString("es") + " puntos de OpenStreetMap · actualizado " + new Date(updated).toLocaleDateString("es") + ". Los precios solo salen donde los conozco.";
+    buildMarkers();
+  } catch (e) {
+    $("status").textContent = "Aún no hay datos descargados (data/chargers.json). Ejecuta la acción «Actualizar cargadores» en GitHub.";
+  }
+}
+fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; if (DATA.length) buildMarkers(); }).catch(() => {});
+loadData();
+
+// ---------- Controles ----------
+let t = null; map.on("moveend", () => { clearTimeout(t); t = setTimeout(refresh, 150); });
+map.on("dragstart", () => { origin = null; });
+$("chips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.t; [...$("chips").children].forEach((x) => x.classList.toggle("on", x === b)); buildMarkers(); });
+["batt", "from", "to", "member", "acmax"].forEach((id) => $(id).addEventListener("input", () => { refresh(); if (sel) select(sel); }));
 $("locate").addEventListener("click", () => {
   if (!navigator.geolocation) { $("status").textContent = "Tu navegador no permite geolocalización."; return; }
-  $("status").textContent = "Obteniendo tu ubicación…";
-  navigator.geolocation.getCurrentPosition((p) => {
-    origin = [p.coords.latitude, p.coords.longitude];
+  $("status").textContent = "Buscando tu ubicación…";
+  navigator.geolocation.getCurrentPosition((pos) => {
+    origin = [pos.coords.latitude, pos.coords.longitude];
     if (youMarker) map.removeLayer(youMarker);
-    youMarker = L.circleMarker(origin, { radius: 9, color: "#0a7", fillColor: "#0a7", fillOpacity: 0.9 }).addTo(map).bindPopup("Tú");
+    youMarker = L.circleMarker(origin, { radius: 9, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map);
     map.setView(origin, 13);
   }, (e) => { $("status").textContent = "No se pudo obtener la ubicación: " + e.message; }, { enableHighAccuracy: true, timeout: 15000 });
 });
-map.on("dragstart", () => { origin = null; });
-
 async function search() {
   const q = $("q").value.trim(); if (!q) return;
   try {
-    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&q=" + encodeURIComponent(q));
-    const j = await r.json();
+    const j = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&q=" + encodeURIComponent(q)).then((r) => r.json());
     if (!j.length) { $("status").textContent = "No encontré ese lugar."; return; }
     origin = null; map.setView([+j[0].lat, +j[0].lon], 13);
   } catch (e) { $("status").textContent = "Error en la búsqueda."; }
@@ -141,12 +154,12 @@ $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
 
 function route() {
   const h = location.hash.slice(1) || "mapa";
-  $("app").hidden = h !== "mapa";
-  $("frame").hidden = h === "mapa";
+  const isMap = h === "mapa";
+  $("panel").hidden = !isMap; if (!isMap) $("card").hidden = true;
+  $("frame").hidden = isMap;
   ["mapa", "coches", "guia"].forEach((n) => { $("n-" + n).className = n === h ? "on" : ""; });
   if (h === "coches") $("frame").src = "guia/index.html#coches";
   else if (h === "guia") $("frame").src = "guia/index.html#cargadores";
   else setTimeout(() => map.invalidateSize(), 50);
 }
-window.addEventListener("hashchange", route);
-route(); load();
+window.addEventListener("hashchange", route); route();
