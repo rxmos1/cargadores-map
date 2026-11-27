@@ -129,7 +129,7 @@ async function loadData() {
     $("status").textContent = "Aún no hay datos descargados (data/chargers.json). Ejecuta la acción «Actualizar cargadores» en GitHub.";
   }
 }
-fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; if (DATA.length) buildMarkers(); }).catch(() => {});
+fetch("prices.json?v=" + Date.now().toString(36).slice(0, -3), { cache: "no-cache" }).then((r) => r.json()).then((j) => { rules = j.rules || []; if (DATA.length) buildMarkers(); }).catch(() => {});
 loadData();
 setTimeout(() => { const b = $("boot"); if (!b.hidden && !DATA.length) b.textContent = "Cargando cargadores… (puede tardar con datos móviles)"; }, 6000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
