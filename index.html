@@ -3,47 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cargadores cerca de Sabadell</title>
+<title>Cargadores de España y comparador de coches</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<nav id="nav"><a href="#mapa" id="n-mapa">Mapa de cargadores</a><a href="#coches" id="n-coches">Comparar coches</a><a href="#guia" id="n-guia">Guía de Sabadell</a></nav>
+<div id="app">
 <aside id="panel">
-  <h1>Cargadores cerca de Sabadell</h1>
-
-  <details open>
-    <summary>Ajustes</summary>
-    <label>Clave Open Charge Map
-      <input id="key" type="password" placeholder="pégala aquí (se guarda en tu navegador)">
-    </label>
-    <div class="row">
-      <label>Radio (km) <input id="radius" type="number" min="1" max="50" value="15"></label>
-      <label>Mín. kW <input id="minkw" type="number" min="0" value="0"></label>
-    </div>
-    <div class="row">
-      <label>Tipo
-        <select id="ctype"><option value="">Todos</option><option value="DC">Rápida (DC)</option><option value="AC">Lenta (AC)</option></select>
-      </label>
-      <label><input id="member" type="checkbox" checked> Precio con mis suscripciones</label>
-    </div>
-    <button id="locate">Usar mi ubicación</button>
-    <button id="load">Buscar cargadores</button>
-  </details>
-
-  <details open>
-    <summary>Mi carga</summary>
-    <div class="row">
-      <label>Batería (kWh) <input id="batt" type="number" value="60"></label>
-      <label>De % <input id="from" type="number" value="10"></label>
-      <label>A % <input id="to" type="number" value="80"></label>
-    </div>
-    <p class="hint">Tu Model 3 RWD admite ~11 kW en AC. El tiempo en DC es una estimación.</p>
-  </details>
-
-  <div id="status">Pega tu clave y pulsa «Buscar cargadores».</div>
+  <div class="row">
+    <input id="q" placeholder="Buscar lugar (ej. Valencia)">
+    <button id="go">Ir</button>
+  </div>
+  <button id="locate">Usar mi ubicación</button>
+  <div class="row">
+    <label>Tipo <select id="ctype"><option value="">Todos</option><option value="DC">Rápida (DC)</option><option value="AC">Lenta (AC)</option></select></label>
+    <label>Mín. kW <input id="minkw" type="number" min="0" value="0"></label>
+  </div>
+  <label><input id="member" type="checkbox" checked> Precio con mis suscripciones</label>
+  <div class="row">
+    <label>Batería kWh <input id="batt" type="number" value="60"></label>
+    <label>De % <input id="from" type="number" value="10"></label>
+    <label>A % <input id="to" type="number" value="80"></label>
+  </div>
+  <p class="hint">Datos de OpenStreetMap (todos los cargadores de España que estén mapeados). Acerca el zoom (nivel 10 o más) para cargarlos. Precio solo donde lo conozco; en el resto, mira la app del operador. Tu Model 3 RWD admite ~11 kW en AC.</p>
+  <div id="status">Mueve el mapa o usa tu ubicación.</div>
   <ul id="list"></ul>
 </aside>
 <div id="map"></div>
+</div>
+<iframe id="frame" hidden></iframe>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
 </body>
