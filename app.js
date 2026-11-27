@@ -50,18 +50,18 @@ function dist(a, b) { const r = Math.PI / 180, dl = (b[0] - a[0]) * r, dn = (b[1
 async function load() {
   if (map.getZoom() < 10) { layer.clearLayers(); $("list").innerHTML = ""; $("status").textContent = "Acerca el zoom (10 o más) para ver los cargadores."; return; }
   const b = map.getBounds();
-  const q = `[out:json][timeout:25];(node["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});way["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out center 1500;`;
+  const q = `[out:json][timeout:40];(node["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});way["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out center 1500;`;
   const id = ++reqId;
   if (ctrl) ctrl.abort();
   $("status").textContent = "Buscando cargadores…";
   let ok = false, lastErr = "";
   for (const u of OVERPASS) {
     ctrl = new AbortController();
-    const mine = ctrl, to = setTimeout(() => mine.abort(), 20000);
+    const mine = ctrl, to = setTimeout(() => mine.abort(), 45000);
     try {
       const r = await fetch(u, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: mine.signal });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      lastData = (await r.json()).elements || []; ok = true; clearTimeout(to); break;
+      const j = await r.json(); if (j.remark && /error|timeout/i.test(j.remark)) throw new Error("servidor saturado"); lastData = j.elements || []; ok = true; clearTimeout(to); break;
     } catch (e) {
       clearTimeout(to);
       if (id !== reqId) return;
