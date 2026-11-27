@@ -3,9 +3,11 @@ const $ = (id) => document.getElementById(id);
 const map = L.map("map").setView([41.5463, 2.1086], 12);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
 const layer = L.layerGroup().addTo(map);
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+let reqId = 0;
 let youMarker = null, rules = [], ctrl = null, timer = null, lastData = [], origin = null;
 
-fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; render(); }).catch(() => {});
+fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; if (lastData.length) render(); }).catch(() => {});
 
 const esc = (s) => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
 const findRule = (t) => rules.find((r) => new RegExp(r.match).test(t.toLowerCase()));
@@ -38,6 +40,7 @@ function info(el) {
     if (/^socket:(ccs|chademo|tesla_supercharger|type1_combo)(:|$)/.test(k)) dc = true;
     if (/^socket:.*:output$/.test(k)) kw = Math.max(kw, parseKw(t[k]));
   }
+  if (!kw && t.capacity) kw = 0;
   if (!dc && kw >= 40) dc = true;
   return { kw, dc, op: t.operator || t.brand || t.network || "", name: t.name || t.operator || t.brand || "Cargador", fee: t.fee, charge: t.charge };
 }
@@ -47,15 +50,26 @@ function dist(a, b) { const r = Math.PI / 180, dl = (b[0] - a[0]) * r, dn = (b[1
 async function load() {
   if (map.getZoom() < 10) { layer.clearLayers(); $("list").innerHTML = ""; $("status").textContent = "Acerca el zoom (10 o más) para ver los cargadores."; return; }
   const b = map.getBounds();
-  const bb = `(${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()})`;
-  const q = `[out:json][timeout:25];(node["amenity"="charging_station"]${bb};way["amenity"="charging_station"]${bb};);out center 1500;`;
-  if (ctrl) ctrl.abort(); ctrl = new AbortController();
+  const q = `[out:json][timeout:25];(node["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});way["amenity"="charging_station"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out center 1500;`;
+  const id = ++reqId;
+  if (ctrl) ctrl.abort();
   $("status").textContent = "Buscando cargadores…";
-  try {
-    const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctrl.signal });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    lastData = (await r.json()).elements || [];
-  } catch (e) { if (e.name !== "AbortError") $("status").textContent = "Error al cargar (" + e.message + "). Reintenta en unos segundos."; return; }
+  let ok = false, lastErr = "";
+  for (const u of OVERPASS) {
+    ctrl = new AbortController();
+    const mine = ctrl, to = setTimeout(() => mine.abort(), 20000);
+    try {
+      const r = await fetch(u, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: mine.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      lastData = (await r.json()).elements || []; ok = true; clearTimeout(to); break;
+    } catch (e) {
+      clearTimeout(to);
+      if (id !== reqId) return;
+      lastErr = e.name === "AbortError" ? "tiempo agotado" : e.message;
+    }
+  }
+  if (id !== reqId) return;
+  if (!ok) { $("status").textContent = "Los servidores de OpenStreetMap están saturados (" + lastErr + "). Mueve el mapa para reintentar."; return; }
   render();
 }
 
