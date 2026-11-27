@@ -1,12 +1,15 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
+if (typeof L === "undefined" || !L.markerClusterGroup) { const b = document.getElementById("boot"); b.className = "err"; b.textContent = "No se pudo cargar el mapa (librería bloqueada). Desactiva los escudos de Brave/bloqueador para este sitio y recarga."; throw new Error("leaflet"); }
 const esc = (s) => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
 
-// Mapa con teselas oscuras de CARTO (datos © OpenStreetMap)
 const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([41.5463, 2.1086], 11);
 L.control.zoom({ position: "bottomright" }).addTo(map);
-L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 18, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }).addTo(map);
-L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 18 }).addTo(map);
+let tileErr = 0;
+const base = L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }).addTo(map);
+L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 19 }).addTo(map);
+// Si el mapa base falla (bloqueador, red), cambia a OpenStreetMap estándar
+base.on("tileerror", () => { if (++tileErr === 8) { map.removeLayer(base); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map).bringToBack(); } });
 const cluster = L.markerClusterGroup({
   chunkedLoading: true, maxClusterRadius: 55, disableClusteringAtZoom: 15, showCoverageOnHover: false,
   iconCreateFunction: (c) => { const n = c.getChildCount(), s = n < 100 ? 34 : n < 1000 ? 42 : 50; return L.divIcon({ html: "<div class='cl' style='width:" + s + "px;height:" + s + "px;line-height:" + (s - 4) + "px'>" + n + "</div>", className: "", iconSize: [s, s] }); },
@@ -14,8 +17,10 @@ const cluster = L.markerClusterGroup({
 map.addLayer(cluster);
 
 let DATA = [], rules = [], origin = null, youMarker = null, filter = "", sel = null, updated = "";
-const nm = (p) => { const n = p[0 + 5]; return n && !/^[\d*_.-]{6,}$/.test(n) ? n : (p[4] || "Punto de recarga") + (p[8] ? " · " + p[8] : ""); };
+const nm = (p) => { const n = p[5]; return n && !/^[\d*_.-]{6,}$/.test(n) ? n : (p[4] || "Punto de recarga") + (p[8] ? " · " + p[8] : ""); };
+let sortBy = "d";
 const F = { lat: 0, lon: 1, kw: 2, dc: 3, op: 4, name: 5, fee: 6 };
+const mq = matchMedia("(max-width:760px)");
 
 // ---------- Precios ----------
 const findRule = (t) => rules.find((r) => new RegExp(r.match).test(t.toLowerCase()));
@@ -63,7 +68,7 @@ function buildMarkers() {
   for (const p of DATA) {
     if (!passes(p)) continue;
     const dc = !!p[F.dc];
-    const m = L.circleMarker([p[F.lat], p[F.lon]], { radius: 6, color: "#111", weight: 1, fillColor: dc ? "#e82127" : "#f2f3f5", fillOpacity: 0.95 });
+    const m = L.circleMarker([p[F.lat], p[F.lon]], { radius: 7, color: "#111", weight: 1, fillColor: dc ? "#e82127" : "#f2f3f5", fillOpacity: 0.95 });
     m.on("click", () => select(p));
     ms.push(m);
   }
@@ -80,7 +85,7 @@ function refresh() {
     if (!b.contains([p[F.lat], p[F.lon]]) || !passes(p)) continue;
     const e = enrich(p, c); e.d = dist(cen, [p[F.lat], p[F.lon]]); rows.push(e);
   }
-  rows.sort((a, b) => a.d - b.d);
+  rows.sort(sortBy === "p" ? (a, b) => (a.price == null) - (b.price == null) || a.price - b.price || a.d - b.d : sortBy === "k" ? (a, b) => b.kw - a.kw || a.d - b.d : (a, b) => a.d - b.d);
   const priced = rows.filter((r) => r.price != null && r.price > 0);
   $("s-n").textContent = rows.length;
   $("s-p").textContent = priced.length ? eur(Math.min(...priced.map((r) => r.price))) : "–";
@@ -90,9 +95,9 @@ function refresh() {
   if (map.getZoom() < 9) return;
   rows.slice(0, 50).forEach((r) => {
     const li = document.createElement("li");
-    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(nm(r.p)) + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + (r.p[8] ? esc(r.p[8]) + " · " : "") + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
+    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(nm(r.p)) + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
       '<div class="pr">' + (r.price != null ? '<b class="ok">' + (r.price === 0 ? "Gratis" : eur(r.price) + "/kWh") + "</b><div class='sub'>" + (r.cost ? eur(r.cost, 1) + " · " : "") + fmtTime(r.hours) + "</div>" : '<div class="na">sin precio</div><div class="sub">' + fmtTime(r.hours) + "</div>") + "</div>";
-    li.addEventListener("click", () => { map.setView([r.p[F.lat], r.p[F.lon]], Math.max(map.getZoom(), 16)); select(r.p); });
+    li.addEventListener("click", () => { if (mq.matches) setSheet("min"); map.setView([r.p[F.lat], r.p[F.lon]], Math.max(map.getZoom(), 16)); select(r.p); });
     $("list").appendChild(li);
   });
 }
@@ -115,38 +120,53 @@ function select(p) {
 async function loadData() {
   $("status").textContent = "Cargando cargadores de España…";
   try {
-    const j = await fetch("data/chargers.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    const j = await fetch("data/chargers.json?v=" + Date.now().toString(36).slice(0, -3), { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     DATA = j.d; updated = j.updated;
-    $("foot").textContent = DATA.length.toLocaleString("es") + " puntos oficiales (MITECO / DGT, CC-BY) · actualizado " + new Date(updated).toLocaleDateString("es") + ". Los precios solo salen donde los conozco; el precio oficial en tiempo real está en mapareve.es.";
-    buildMarkers();
+    $("foot").textContent = DATA.length.toLocaleString("es") + " puntos oficiales (MITECO / DGT, CC-BY) · actualizado " + new Date(updated).toLocaleDateString("es") + ". Precio solo donde se conoce la tarifa; el oficial en tiempo real está en mapareve.es.";
+    buildMarkers(); $("boot").hidden = true;
   } catch (e) {
+    const bt = $("boot"); bt.hidden = false; bt.className = "err"; bt.textContent = "No se pudieron cargar los cargadores. Recarga la página.";
     $("status").textContent = "Aún no hay datos descargados (data/chargers.json). Ejecuta la acción «Actualizar cargadores» en GitHub.";
   }
 }
 fetch("prices.json").then((r) => r.json()).then((j) => { rules = j.rules || []; if (DATA.length) buildMarkers(); }).catch(() => {});
 loadData();
+setTimeout(() => { const b = $("boot"); if (!b.hidden && !DATA.length) b.textContent = "Cargando cargadores… (puede tardar con datos móviles)"; }, 6000);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 // ---------- Controles ----------
 let t = null; map.on("moveend", () => { clearTimeout(t); t = setTimeout(refresh, 150); });
 map.on("dragstart", () => { origin = null; });
 $("chips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.t; [...$("chips").children].forEach((x) => x.classList.toggle("on", x === b)); buildMarkers(); });
 ["batt", "from", "to", "member", "acmax"].forEach((id) => $(id).addEventListener("input", () => { refresh(); if (sel) select(sel); }));
-$("locate").addEventListener("click", () => {
+function locate() {
   if (!navigator.geolocation) { $("status").textContent = "Tu navegador no permite geolocalización."; return; }
   $("status").textContent = "Buscando tu ubicación…";
   navigator.geolocation.getCurrentPosition((pos) => {
     origin = [pos.coords.latitude, pos.coords.longitude];
     if (youMarker) map.removeLayer(youMarker);
-    youMarker = L.circleMarker(origin, { radius: 9, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map);
-    map.setView(origin, 13);
-  }, (e) => { $("status").textContent = "No se pudo obtener la ubicación: " + e.message; }, { enableHighAccuracy: true, timeout: 15000 });
-});
+    youMarker = L.circleMarker(origin, { radius: 9, color: "#fff", weight: 3, fillColor: "#3b82f6", fillOpacity: 1, interactive: false }).addTo(map);
+    map.setView(origin, 14); $("status").textContent = "";
+  }, (e) => { $("status").textContent = "No se pudo obtener la ubicación (" + (e.code === 1 ? "permiso denegado" : "sin señal") + ")."; }, { enableHighAccuracy: true, timeout: 15000 });
+}
+$("locate").addEventListener("click", locate); $("fab").addEventListener("click", locate);
+$("sort").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sortBy = b.dataset.s; [...$("sort").children].forEach((x) => x.classList.toggle("on", x === b)); refresh(); });
+
+// Hoja inferior arrastrable en móvil
+const panel = $("panel"), grip = $("grip");
+function setSheet(state) { panel.classList.toggle("min", state === "min"); panel.classList.toggle("full", state === "full"); const h = state === "min" ? 150 : state === "full" ? innerHeight * .88 : innerHeight * .44; document.documentElement.style.setProperty("--sh", h + "px"); panel.dataset.s = state; setTimeout(() => map.invalidateSize(), 250); }
+const order = ["min", "mid", "full"];
+grip.addEventListener("click", () => setSheet(order[(order.indexOf(panel.dataset.s || "mid") + 1) % 3]));
+let y0 = null; grip.addEventListener("touchstart", (e) => { y0 = e.touches[0].clientY; }, { passive: true });
+grip.addEventListener("touchend", (e) => { if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) < 25) return; const i = order.indexOf(panel.dataset.s || "mid"); setSheet(order[Math.max(0, Math.min(2, i + (dy < 0 ? 1 : -1)))]); });
+if (mq.matches) setSheet("mid");
+$("q").addEventListener("focus", () => { if (mq.matches && panel.dataset.s === "min") setSheet("mid"); });
 async function search() {
   const q = $("q").value.trim(); if (!q) return;
   try {
     const j = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&q=" + encodeURIComponent(q)).then((r) => r.json());
     if (!j.length) { $("status").textContent = "No encontré ese lugar."; return; }
-    origin = null; map.setView([+j[0].lat, +j[0].lon], 13);
+    origin = null; map.setView([+j[0].lat, +j[0].lon], 13); if (mq.matches) { setSheet("mid"); $("q").blur(); }
   } catch (e) { $("status").textContent = "Error en la búsqueda."; }
 }
 $("go").addEventListener("click", search);
@@ -155,7 +175,7 @@ $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
 function route() {
   const h = location.hash.slice(1) || "mapa";
   const isMap = h === "mapa";
-  $("panel").hidden = !isMap; if (!isMap) $("card").hidden = true;
+  $("panel").hidden = !isMap; $("fab").hidden = !isMap; if (!isMap) $("card").hidden = true;
   $("frame").hidden = isMap;
   ["mapa", "coches", "guia"].forEach((n) => { $("n-" + n).className = n === h ? "on" : ""; });
   if (h === "coches") $("frame").src = "guia/index.html#coches";
