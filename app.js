@@ -5,9 +5,8 @@ const esc = (s) => { const d = document.createElement("div"); d.textContent = s 
 // Mapa con teselas oscuras de CARTO (datos © OpenStreetMap)
 const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView([41.5463, 2.1086], 11);
 L.control.zoom({ position: "bottomright" }).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  subdomains: "abcd", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-}).addTo(map);
+L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 18, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }).addTo(map);
+L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 16, maxZoom: 18 }).addTo(map);
 const cluster = L.markerClusterGroup({
   chunkedLoading: true, maxClusterRadius: 55, disableClusteringAtZoom: 15, showCoverageOnHover: false,
   iconCreateFunction: (c) => { const n = c.getChildCount(), s = n < 100 ? 34 : n < 1000 ? 42 : 50; return L.divIcon({ html: "<div class='cl' style='width:" + s + "px;height:" + s + "px;line-height:" + (s - 4) + "px'>" + n + "</div>", className: "", iconSize: [s, s] }); },
@@ -15,6 +14,7 @@ const cluster = L.markerClusterGroup({
 map.addLayer(cluster);
 
 let DATA = [], rules = [], origin = null, youMarker = null, filter = "", sel = null, updated = "";
+const nm = (p) => { const n = p[0 + 5]; return n && !/^[\d*_.-]{6,}$/.test(n) ? n : (p[4] || "Punto de recarga") + (p[8] ? " · " + p[8] : ""); };
 const F = { lat: 0, lon: 1, kw: 2, dc: 3, op: 4, name: 5, fee: 6 };
 
 // ---------- Precios ----------
@@ -90,7 +90,7 @@ function refresh() {
   if (map.getZoom() < 9) return;
   rows.slice(0, 50).forEach((r) => {
     const li = document.createElement("li");
-    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(r.p[F.name] || r.p[F.op] || "Cargador") + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
+    li.innerHTML = '<div><div class="nm"><span class="dot ' + (r.dc ? "dc" : "") + '"></span>' + esc(nm(r.p)) + '</div><div class="sub">' + esc(r.p[F.op] || "Operador desconocido") + " · " + (r.p[8] ? esc(r.p[8]) + " · " : "") + r.d.toFixed(1) + " km · " + r.kw + " kW " + (r.dc ? "DC" : "AC") + '</div></div>' +
       '<div class="pr">' + (r.price != null ? '<b class="ok">' + (r.price === 0 ? "Gratis" : eur(r.price) + "/kWh") + "</b><div class='sub'>" + (r.cost ? eur(r.cost, 1) + " · " : "") + fmtTime(r.hours) + "</div>" : '<div class="na">sin precio</div><div class="sub">' + fmtTime(r.hours) + "</div>") + "</div>";
     li.addEventListener("click", () => { map.setView([r.p[F.lat], r.p[F.lon]], Math.max(map.getZoom(), 16)); select(r.p); });
     $("list").appendChild(li);
@@ -101,7 +101,7 @@ function select(p) {
   sel = p; const c = car(), e = enrich(p, c);
   const card = $("card"); card.hidden = false;
   const noteBase = e.rule && e.rule.sub ? "Suscripción: " + e.rule.sub.name : "";
-  card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3>' + esc(p[F.name] || p[F.op] || "Cargador") + '</h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
+  card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3>' + esc(nm(p)) + '</h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
     '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
     '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
     "<div><span>Coste de tu carga</span>" + (e.cost != null ? eur(e.cost, 2) : "—") + "</div><div><span>Km que añades</span>~" + Math.round(c.kwh / 0.16) + " km</div></div>" +
@@ -117,7 +117,7 @@ async function loadData() {
   try {
     const j = await fetch("data/chargers.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     DATA = j.d; updated = j.updated;
-    $("foot").textContent = DATA.length.toLocaleString("es") + " puntos de OpenStreetMap · actualizado " + new Date(updated).toLocaleDateString("es") + ". Los precios solo salen donde los conozco.";
+    $("foot").textContent = DATA.length.toLocaleString("es") + " puntos oficiales (MITECO / DGT, CC-BY) · actualizado " + new Date(updated).toLocaleDateString("es") + ". Los precios solo salen donde los conozco; el precio oficial en tiempo real está en mapareve.es.";
     buildMarkers();
   } catch (e) {
     $("status").textContent = "Aún no hay datos descargados (data/chargers.json). Ejecuta la acción «Actualizar cargadores» en GitHub.";
