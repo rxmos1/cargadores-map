@@ -16,7 +16,7 @@ const cluster = L.markerClusterGroup({
 });
 map.addLayer(cluster);
 
-let DATA = [], rules = [], origin = null, youMarker = null, filter = "", sel = null, updated = "";
+let hourSel = null, brands = new Set(), DATA = [], rules = [], origin = null, youMarker = null, filter = "", sel = null, updated = "";
 const nm = (p) => { const n = p[5]; return n && !/^[\d*_.-]{6,}$/.test(n) ? n : (p[4] || "Punto de recarga") + (p[8] ? " · " + p[8] : ""); };
 let sortBy = "d";
 const F = { lat: 0, lon: 1, kw: 2, dc: 3, op: 4, name: 5, fee: 6 };
@@ -26,7 +26,7 @@ const mq = matchMedia("(max-width:760px)");
 const findRule = (t) => rules.find((r) => new RegExp(r.match).test(t.toLowerCase()));
 function basePrice(rule, dc) {
   if (!rule) return null;
-  if (dc && rule.schedule) { const h = new Date().getHours(); const s = rule.schedule.find((x) => h >= x[0] && h < x[1]); if (s) return s[2]; }
+  if (dc && rule.schedule) { const h = hourSel != null ? hourSel : new Date().getHours(); const s = rule.schedule.find((x) => h >= x[0] && h < x[1]); if (s) return s[2]; }
   const p = dc ? rule.dc : rule.ac; return typeof p === "number" ? p : null;
 }
 function memberPrice(rule, base) {
@@ -54,6 +54,7 @@ function enrich(p, c) {
   return { p, dc, kw, rule, price, hours, cost: price != null ? price * c.kwh : null };
 }
 const passes = (p) => {
+  if (brands.size && !brands.has(p[9])) return false;
   if (filter === "DC") return !!p[F.dc];
   if (filter === "AC") return !p[F.dc];
   if (filter === "150") return p[F.kw] >= 150;
@@ -102,6 +103,28 @@ function refresh() {
   });
 }
 
+const BR = [[/endesa/i, "Endesa X Way"], [/iberdrola/i, "Iberdrola"], [/repsol/i, "Repsol"], [/zunder|easychargar/i, "Zunder"], [/tesla/i, "Tesla"], [/electra/i, "Electra"], [/totalenergies/i, "TotalEnergies"], [/wenea/i, "Wenea"], [/\bedp\b/i, "EDP"], [/ionity/i, "Ionity"], [/atlante/i, "Atlante"], [/acciona/i, "Acciona"], [/galp/i, "Galp"], [/fastned/i, "Fastned"], [/barcelona de serveis|\bbsm\b/i, "BSM"], [/etecnic/i, "Etecnic"], [/charging together/i, "Charging Together"], [/eranovum/i, "Eranovum"], [/plenoil/i, "Plenoil"], [/bonpreu/i, "Bonpreu"]];
+function brandOf(op) { op = op || ""; for (const [re, n] of BR) if (re.test(op)) return n; return op.replace(/[,.]?\s*(S\.?L\.?U?\.?|S\.?A\.?U?\.?|SRL)\s*$/i, "").trim() || "Otros"; }
+function buildBrandUI() {
+  const cnt = {}; DATA.forEach((p) => { cnt[p[9]] = (cnt[p[9]] || 0) + 1; });
+  const list = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 40);
+  $("brands").innerHTML = '<button data-b="" class="on">Todas</button>' + list.map(([n, k]) => '<button data-b="' + esc(n) + '">' + esc(n) + " <small>" + k + "</small></button>").join("");
+}
+$("brands").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (!b.dataset.b) brands.clear(); else if (brands.has(b.dataset.b)) brands.delete(b.dataset.b); else brands.add(b.dataset.b);
+  [...$("brands").children].forEach((x) => x.classList.toggle("on", x.dataset.b ? brands.has(x.dataset.b) : !brands.size));
+  $("bn").textContent = brands.size ? "(" + brands.size + ")" : "";
+  buildMarkers();
+});
+function strip(e) {
+  if (!e.rule || !e.rule.schedule || !e.dc) return "";
+  const cur = hourSel != null ? hourSel : new Date().getHours(), v = [];
+  for (let i = 0; i < 24; i++) { const s = e.rule.schedule.find((x) => i >= x[0] && i < x[1]); v.push(s ? s[2] : e.rule.dc); }
+  const mx = Math.max(...v), mn = Math.min(...v); let bars = "";
+  for (let i = 0; i < 24; i++) bars += '<i class="' + (i === cur ? "cur" : "") + '" style="height:' + (30 + (v[i] - mn) / (mx - mn || 1) * 70) + '%" title="' + i + ":00 · " + eur(v[i]) + '"></i>';
+  return '<div class="strip"><div>' + bars + "</div><span>Tarifa pública por hora (0–24 h): de " + eur(mn) + " a " + eur(mx) + " /kWh</span></div>";
+}
 function select(p) {
   sel = p; const c = car(), e = enrich(p, c);
   const card = $("card"); card.hidden = false;
@@ -110,7 +133,7 @@ function select(p) {
     '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
     (() => { const bp = basePrice(e.rule, e.dc), mp = memberPrice(e.rule, bp); return e.rule && e.rule.sub && bp && mp < bp ? '<p class="alt">Sin suscripción ' + eur(bp) + ' · Con suscripción ' + eur(mp) + ' /kWh</p>' : ""; })() + '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
     "<div><span>Coste de tu carga</span>" + (e.cost != null ? eur(e.cost, 2) : "—") + "</div><div><span>Km que añades</span>~" + Math.round(c.kwh / 0.16) + " km</div></div>" +
-    (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
+    strip(e) + (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
     (e.price == null ? '<p class="sub">No tengo el precio de este operador. Mira su app (Reve/operador).</p>' : "") +
     '<a class="go" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + p[F.lat] + "," + p[F.lon] + '">Cómo llegar</a>';
   card.querySelector(".x").onclick = () => { card.hidden = true; sel = null; };
@@ -122,6 +145,7 @@ async function loadData() {
   try {
     const j = await fetch("data/chargers.json?v=" + Date.now().toString(36).slice(0, -3), { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     DATA = j.d; updated = j.updated;
+    DATA.forEach((p) => { p[9] = brandOf(p[4]); }); buildBrandUI();
     $("foot").textContent = DATA.length.toLocaleString("es") + " puntos oficiales (MITECO / DGT, CC-BY) · actualizado " + new Date(updated).toLocaleDateString("es") + ". Precio solo donde se conoce la tarifa; el oficial en tiempo real está en mapareve.es.";
     buildMarkers(); $("boot").hidden = true;
   } catch (e) {
@@ -141,6 +165,9 @@ $("chips").addEventListener("click", (e) => { const b = e.target.closest("button
 const swh = () => { $("swh").textContent = $("member").checked ? "Precio con descuento de suscripción" : "Precio de tarifa pública, sin suscripción"; };
 ["batt", "from", "to", "member", "acmax"].forEach((id) => $(id).addEventListener("input", () => { swh(); refresh(); if (sel) select(sel); }));
 $("member").addEventListener("change", () => { swh(); refresh(); if (sel) select(sel); }); swh();
+const hs = $("hour");
+hs.innerHTML = '<option value="">Ahora</option>' + Array.from({ length: 24 }, (_, i) => '<option value="' + i + '">' + String(i).padStart(2, "0") + ":00</option>").join("");
+hs.addEventListener("change", () => { hourSel = hs.value === "" ? null : +hs.value; refresh(); if (sel) select(sel); });
 function locate() {
   if (!navigator.geolocation) { $("status").textContent = "Tu navegador no permite geolocalización."; return; }
   $("status").textContent = "Buscando tu ubicación…";

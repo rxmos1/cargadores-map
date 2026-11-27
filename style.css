@@ -70,3 +70,10 @@ label { display:block; color:var(--mut); font-size:12px; margin:6px 0; } label i
 .sw input { position:absolute; opacity:0; width:0; height:0; margin:0; } .sw i { flex:none; width:46px; height:28px; border-radius:999px; background:#3a3d44; position:relative; transition:background .2s; } .sw i::after { content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition:transform .2s; } .sw input:checked + i { background:var(--ok); } .sw input:checked + i::after { transform:translateX(18px); }
 #card .alt { margin:6px 0 0; font-size:12px; color:var(--mut); }
 @media (max-width:760px) { #panel.min .sw { display:none; } }
+
+.hrow { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0 0; flex:none; } .hrow label { margin:0; color:var(--mut); font-size:13px; }
+select { background:#1d1f23; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 10px; font:inherit; min-width:110px; }
+details.brands { margin:2px 0 8px; flex:none; } .bchips { display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow:auto; padding:6px 0; }
+.bchips button { background:transparent; border:1px solid var(--line); border-radius:999px; padding:5px 10px; color:var(--mut); font-size:12px; cursor:pointer; } .bchips button small { opacity:.7; } .bchips button.on { background:var(--ink); color:#111; border-color:var(--ink); font-weight:600; }
+.strip { margin-top:10px; } .strip > div { display:flex; align-items:flex-end; gap:2px; height:44px; } .strip i { flex:1; background:#3a3d44; border-radius:2px; } .strip i.cur { background:var(--ok); } .strip span { color:var(--mut); font-size:11px; }
+@media (max-width:760px) { #panel.min .hrow { display:none; } select { font-size:16px; } }
