@@ -108,7 +108,7 @@ function select(p) {
   const noteBase = e.rule && e.rule.sub ? "Suscripción: " + e.rule.sub.name : "";
   card.innerHTML = '<button class="x" aria-label="Cerrar">×</button><h3>' + esc(nm(p)) + '</h3><div class="sub">' + esc(p[F.op] || "Operador desconocido") + "</div>" +
     '<div class="big ' + (e.price != null ? "ok" : "") + '">' + (e.price == null ? "Sin precio" : e.price === 0 ? "Gratis" : eur(e.price) + '<small style="font-size:14px;color:var(--mut)"> /kWh</small>') + "</div>" +
-    '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
+    (() => { const bp = basePrice(e.rule, e.dc), mp = memberPrice(e.rule, bp); return e.rule && e.rule.sub && bp && mp < bp ? '<p class="alt">Sin suscripción ' + eur(bp) + ' · Con suscripción ' + eur(mp) + ' /kWh</p>' : ""; })() + '<div class="grid"><div><span>Potencia</span>' + e.kw + " kW " + (e.dc ? "DC" : "AC") + "</div><div><span>Tiempo estimado</span>" + fmtTime(e.hours) + "</div>" +
     "<div><span>Coste de tu carga</span>" + (e.cost != null ? eur(e.cost, 2) : "—") + "</div><div><span>Km que añades</span>~" + Math.round(c.kwh / 0.16) + " km</div></div>" +
     (e.rule && e.rule.note ? '<p class="sub">' + esc(e.rule.note) + "</p>" : "") + (noteBase ? '<p class="sub">' + esc(noteBase) + "</p>" : "") +
     (e.price == null ? '<p class="sub">No tengo el precio de este operador. Mira su app (Reve/operador).</p>' : "") +
@@ -138,7 +138,9 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 let t = null; map.on("moveend", () => { clearTimeout(t); t = setTimeout(refresh, 150); });
 map.on("dragstart", () => { origin = null; });
 $("chips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.t; [...$("chips").children].forEach((x) => x.classList.toggle("on", x === b)); buildMarkers(); });
-["batt", "from", "to", "member", "acmax"].forEach((id) => $(id).addEventListener("input", () => { refresh(); if (sel) select(sel); }));
+const swh = () => { $("swh").textContent = $("member").checked ? "Precio con descuento de suscripción" : "Precio de tarifa pública, sin suscripción"; };
+["batt", "from", "to", "member", "acmax"].forEach((id) => $(id).addEventListener("input", () => { swh(); refresh(); if (sel) select(sel); }));
+$("member").addEventListener("change", () => { swh(); refresh(); if (sel) select(sel); }); swh();
 function locate() {
   if (!navigator.geolocation) { $("status").textContent = "Tu navegador no permite geolocalización."; return; }
   $("status").textContent = "Buscando tu ubicación…";

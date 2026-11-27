@@ -65,3 +65,8 @@ label { display:block; color:var(--mut); font-size:12px; margin:6px 0; } label i
   #frame { top:52px; height:calc(100% - 52px); }
 }
 @media (min-width:761px) { #fab { display:flex; left:394px; right:auto; bottom:16px; } }
+
+.sw { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:10px 0 0; padding:10px 12px; background:#1a1c20; border:1px solid var(--line); border-radius:12px; cursor:pointer; color:var(--ink); position:relative; flex:none; } .sw b { display:block; font-size:14px; } .sw small { color:var(--mut); font-size:12px; }
+.sw input { position:absolute; opacity:0; width:0; height:0; margin:0; } .sw i { flex:none; width:46px; height:28px; border-radius:999px; background:#3a3d44; position:relative; transition:background .2s; } .sw i::after { content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition:transform .2s; } .sw input:checked + i { background:var(--ok); } .sw input:checked + i::after { transform:translateX(18px); }
+#card .alt { margin:6px 0 0; font-size:12px; color:var(--mut); }
+@media (max-width:760px) { #panel.min .sw { display:none; } }

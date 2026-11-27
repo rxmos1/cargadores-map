@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <div id="map"></div>
@@ -32,6 +32,7 @@
     <button id="go" aria-label="Buscar">⌕</button>
     <button id="locate" aria-label="Mi ubicación" title="Mi ubicación">◎</button>
   </div>
+  <label class="sw"><span><b>Mis suscripciones</b><small id="swh">Precio con descuento</small></span><input id="member" type="checkbox" checked><i></i></label>
   <div class="chips" id="chips">
     <button data-t="" class="on">Todos</button><button data-t="DC">Rápidos</button><button data-t="AC">Lentos</button>
     <button data-t="150">+150 kW</button><button data-t="priced">Con precio</button>
@@ -47,7 +48,7 @@
       <label>De %<input id="from" type="number" value="10"></label>
       <label>A %<input id="to" type="number" value="80"></label>
     </div>
-    <label class="chk"><input id="member" type="checkbox" checked> Con mis suscripciones</label>
+    
     <label>Límite AC (kW)<input id="acmax" type="number" value="11"></label>
   </details>
   <div id="status"></div>
@@ -61,6 +62,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="this.onerror=null;document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js&quot;><\/script>')"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" onerror="this.onerror=null;document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js&quot;><\/script>')"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
