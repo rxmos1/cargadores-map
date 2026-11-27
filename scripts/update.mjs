@@ -17,14 +17,14 @@ async function query(bbox) {
   for (let attempt = 0; attempt < 6; attempt++) {
     const url = SERVERS[attempt % SERVERS.length];
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(150000) });
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json", "User-Agent": "cargadores-map/1.0 (https://github.com/rxmos1/cargadores-map)" }, signal: AbortSignal.timeout(150000) });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       if (j.remark && /error|timeout/i.test(j.remark)) throw new Error(j.remark);
       return j.elements || [];
     } catch (err) {
       console.log(`  intento ${attempt + 1} falló en ${new URL(url).host}: ${err.message}`);
-      await sleep(5000 * (attempt + 1));
+      await sleep(15000 * (attempt + 1));
     }
   }
   throw new Error("No se pudo descargar la cuadrícula " + bbox);
